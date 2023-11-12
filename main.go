@@ -7,13 +7,13 @@ import (
 )
 
 func main() {
-	newLRUCache := cache.New(3, 20*time.Second, 10*time.Second)
-	newLRUCache.Put(1, "Physics")
-	newLRUCache.Put(2, "Math")
-	newLRUCache.Put(3, "Astronomy")
-	newLRUCache.Put(4, "Linear algebra")
-	fmt.Println(newLRUCache.Get(2))
-	fmt.Println(newLRUCache.Get(1))
-	time.Sleep(40 * time.Second)
-	fmt.Println(newLRUCache.Get(2))
+	newLRUCache := cache.New(3, 2*time.Second, 200*time.Millisecond)
+	newLRUCache.Put("1", "Physics")
+	newLRUCache.Put("2", "Math")
+	newLRUCache.Put("3", "Astronomy")
+	newLRUCache.Put("4", "Linear algebra")
+	fmt.Println(newLRUCache.Get("2"))
+	fmt.Println(newLRUCache.Get("1"))
+	time.Sleep(4 * time.Second)
+	fmt.Println(newLRUCache.Get("2"))
 }

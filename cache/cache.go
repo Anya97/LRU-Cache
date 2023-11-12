@@ -8,26 +8,32 @@ type Cleaner struct {
 	Interval time.Duration
 }
 
+type Node struct {
+	previousElemLink *Node
+	nextElemLink     *Node
+	key              *string
+}
+
 type item struct {
-	value    string
-	creation int64
-	rank     int
+	value    interface{}
+	creation time.Time
+	node     *Node
 }
 
 type LRUCache struct {
-	cacheMap map[int]item
-	ttl      time.Duration
-	cleaner  *Cleaner
-	capacity int
-	rank     int
+	cacheMap      map[string]*item
+	ttl           time.Duration
+	cleaner       *Cleaner
+	capacity      int
+	firstElemLink *Node
+	lastElemLink  *Node
 }
 
 func New(capacity int, ttl time.Duration, cleanUpInterval time.Duration) *LRUCache {
 	newLRUCache := LRUCache{
-		cacheMap: map[int]item{},
+		cacheMap: map[string]*item{},
 		ttl:      ttl,
 		capacity: capacity,
-		rank:     0,
 	}
 
 	if cleanUpInterval > 0 {
@@ -37,26 +43,33 @@ func New(capacity int, ttl time.Duration, cleanUpInterval time.Duration) *LRUCac
 	return &newLRUCache
 }
 
-func (c *LRUCache) Get(key int) string {
-	rankValue := c.rank
-	item := c.cacheMap[key]
-	item.rank = rankValue
-	c.rank++
-	return item.value
+func (c *LRUCache) Get(key string) interface{} {
+	if element := c.get(key); element != nil {
+		return element.value
+	}
+	return nil
 }
 
-func (c *LRUCache) Put(key int, value string) {
-	if len(c.cacheMap) == c.capacity {
-		var minRankKey int = -1
-		for k, _ := range c.cacheMap {
-			if minRankKey == -1 || c.cacheMap[k].rank < c.cacheMap[minRankKey].rank {
-				minRankKey = k
-			}
-		}
-		delete(c.cacheMap, minRankKey)
+func (c *LRUCache) get(key string) *item {
+	itemInCache, ok := c.cacheMap[key]
+	if !ok {
+		return nil
 	}
-	c.cacheMap[key] = item{value: value, creation: time.Now().UnixNano(), rank: c.rank}
-	c.rank++
+	c.moveToBack(itemInCache)
+	return itemInCache
+}
+
+func (c *LRUCache) Put(key string, value interface{}) {
+	if element := c.get(key); element != nil {
+		c.cacheMap[key] = &item{value: value, creation: time.Now(), node: element.node}
+		return
+	}
+	if len(c.cacheMap) == c.capacity {
+		c.removeFirst()
+	}
+	valueItem := item{value: value, creation: time.Now(), node: &Node{key: &key}}
+	c.cacheMap[key] = &valueItem
+	c.pushBack(valueItem.node)
 }
 
 func clean(cleanUpInterval time.Duration, cache *LRUCache) {
@@ -80,11 +93,57 @@ func (c *Cleaner) Cleaning(cache *LRUCache) {
 }
 
 func (c *LRUCache) purge() {
-	now := time.Now().UnixNano()
-	ttl := c.ttl.Nanoseconds()
 	for key, data := range c.cacheMap {
-		if data.creation+ttl < now {
+		if data.creation.Add(c.ttl).After(time.Now()) {
+			c.unlinkNode(data.node)
 			delete(c.cacheMap, key)
 		}
+	}
+}
+
+func (c *LRUCache) moveToBack(element *item) {
+	if c.lastElemLink == element.node {
+		return
+	}
+	if c.firstElemLink == element.node {
+		c.firstElemLink = c.firstElemLink.nextElemLink
+		c.firstElemLink.previousElemLink = nil
+	} else {
+		element.node.previousElemLink.nextElemLink = element.node.nextElemLink
+		element.node.nextElemLink.previousElemLink = element.node.previousElemLink
+	}
+	c.lastElemLink.nextElemLink = element.node
+	element.node.previousElemLink = c.lastElemLink
+	element.node.nextElemLink = nil
+	c.lastElemLink = element.node
+}
+
+func (c *LRUCache) pushBack(node *Node) {
+	if c.firstElemLink == nil {
+		c.firstElemLink = node
+		c.lastElemLink = node
+	} else {
+		c.lastElemLink.nextElemLink = node
+		node.previousElemLink = c.lastElemLink
+		c.lastElemLink = node
+	}
+}
+
+func (c *LRUCache) removeFirst() {
+	delete(c.cacheMap, *c.firstElemLink.key)
+	c.firstElemLink = c.firstElemLink.nextElemLink
+	c.firstElemLink.previousElemLink = nil
+}
+
+func (c *LRUCache) unlinkNode(node *Node) {
+	if node.previousElemLink != nil {
+		node.previousElemLink.nextElemLink = node.nextElemLink
+	} else {
+		c.firstElemLink = node.nextElemLink
+	}
+	if node.nextElemLink != nil {
+		node.nextElemLink.previousElemLink = node.previousElemLink
+	} else {
+		c.lastElemLink = node.previousElemLink
 	}
 }
